@@ -1,0 +1,46 @@
+name: repro
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  repro:
+    name: ${{ matrix.os }} · pw ${{ matrix.playwright }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # macos-15 / macos-26 are Apple Silicon. ubuntu-24.04-arm is arm64 too, but 4 KB
+        # pages and not Darwin, so it separates "arm64" from "Apple Silicon macOS".
+        os: [macos-15, macos-26, ubuntu-24.04-arm]
+        # 1.62.0 ships WebKit r2336 (last good), 1.63.0 ships r2359 (first bad).
+        playwright: ['1.62.0', '1.63.0']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install
+        run: |
+          npm install --no-package-lock --no-save @playwright/test@${{ matrix.playwright }}
+          npx playwright install --with-deps webkit
+
+      - name: Run repro
+        run: |
+          set -o pipefail
+          node repro.js --repeat=3 2>&1 | tee result.txt
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### ${{ matrix.os }} · @playwright/test@${{ matrix.playwright }}"
+            echo '```'
+            cat result.txt || echo '(no output)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

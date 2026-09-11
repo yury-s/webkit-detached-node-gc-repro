@@ -1,0 +1,17 @@
+{
+  "name": "webkit-detached-node-gc-repro",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Detached DOM nodes survive a forced full GC on Apple Silicon macOS (WebKit regression between 319949@main and 320228@main)",
+  "main": "repro.js",
+  "bin": { "webkit-gc-repro": "repro.js" },
+  "scripts": {
+    "repro": "node repro.js",
+    "install-browser": "playwright install webkit"
+  },
+  "dependencies": {
+    "@playwright/test": "1.63.0"
+  },
+  "engines": { "node": ">=18" },
+  "license": "MIT"
+}
