@@ -23,6 +23,20 @@ const { webkit, expect } = require('@playwright/test');
 const COUNT = 25;
 const EXPECTED_ALIVE = 4; // the 2 static buttons, each registered twice
 
+// The bug is all-or-nothing: every dynamic button survives, so `alive` jumps straight to 29.
+// A handful above EXPECTED_ALIVE is something else — a Playwright action holding its last
+// target (microsoft/playwright#41462) shows up as exactly one extra. Mirrors the upstream
+// test, which accepts anything under 25 and only fails on wholesale retention.
+const LEAK_THRESHOLD = COUNT;
+
+function verdict(alive) {
+  if (alive >= LEAK_THRESHOLD)
+    return `LEAK — all ${COUNT} detached buttons survived the GC`;
+  if (alive > EXPECTED_ALIVE)
+    return `ok (${alive - EXPECTED_ALIVE} extra retained — not this bug)`;
+  return 'ok';
+}
+
 // The WebKit build number identifies the regression far better than the Playwright version.
 function webkitRevision() {
   try {
@@ -127,9 +141,9 @@ async function runVariant(browser, name) {
     for (let i = 0; i < repeat; ++i)
       results.push(await runVariant(browser, name));
     for (const alive of results) {
-      const bad = alive > EXPECTED_ALIVE;
+      const bad = alive >= LEAK_THRESHOLD;
       leaked = leaked || bad;
-      console.log(`${name.padEnd(10)} ${String(alive).padStart(5)}  ${bad ? 'LEAK — detached buttons survived the GC' : 'ok'}`);
+      console.log(`${name.padEnd(10)} ${String(alive).padStart(5)}  ${verdict(alive)}`);
     }
   }
   await browser.close();

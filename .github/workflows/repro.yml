@@ -3,6 +3,11 @@ name: repro
 on:
   push:
   workflow_dispatch:
+    inputs:
+      upstream:
+        description: Also run the unreduced page-leaks test (slow — builds playwright)
+        type: boolean
+        default: false
 
 jobs:
   repro:
@@ -33,7 +38,7 @@ jobs:
       - name: Run repro
         run: |
           set -o pipefail
-          node repro.js --repeat=3 2>&1 | tee result.txt
+          node repro.js --repeat=10 2>&1 | tee result.txt
 
       - name: Summary
         if: always()
@@ -49,6 +54,7 @@ jobs:
   # macos-15-xlarge bot fails it. Tells us whether a green `repro` job above means
   # "this runner does not trigger it" or "the reduction lost the trigger".
   upstream-test:
+    if: github.event_name == 'push' || inputs.upstream
     name: playwright page-leaks · ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45

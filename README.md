@@ -20,16 +20,28 @@ On an unaffected machine every variant prints `ok`. On an affected one:
 
 ```
 variant     alive  verdict
-expect         29  LEAK — detached buttons survived the GC
+expect         29  LEAK — all 25 detached buttons survived the GC
 wait-for        4  ok
 click           4  ok
 ```
 
-29 of 29 means nothing was collected: 2 static buttons registered twice, plus all 25 dynamic
-buttons. 4 is correct — the two static buttons are still in the document.
+The bug is all-or-nothing: 29 of 29 means nothing was collected — 2 static buttons registered
+twice, plus all 25 dynamic ones. 4 is correct, since the two static buttons are still in the
+document. A count a little above 4 is **not** this bug; a Playwright action holding on to its last
+target shows up as exactly one extra
+([microsoft/playwright#41462](https://github.com/microsoft/playwright/issues/41462)), so anything
+below 25 is reported as `ok` with the surplus noted, matching the upstream test's own threshold.
 
-`--variant=<name>` runs one variant, `--repeat=N` runs it N times. Exit code is 1 if anything
-leaked.
+`--variant=<name>` runs one variant, `--repeat=N` runs it N times. Exit code is 1 only on
+wholesale retention.
+
+### Reproduction rate
+
+This is flaky, so a single green run proves nothing. On microsoft/playwright's own
+`macos-15-xlarge` bot (6-core M1) it fails ~70% of runs. On GitHub's *standard* `macos-15` /
+`macos-26` runners (3-core M1, 7 GB) it has not yet been observed — see the workflow runs in this
+repo. If you have access to larger macOS runners, or a physical Apple Silicon machine that shows
+it, that is the configuration worth testing.
 
 ## The browser is the variable, not Playwright
 
