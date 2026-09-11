@@ -4,9 +4,12 @@ A container's children are removed and a full GC is forced through the Inspector
 the detached `<button>` elements are still reachable — every `WeakRef` to them still derefs, and
 stays that way across repeated GCs.
 
-It only happens when each button was visited by a Playwright `expect(locator).toBeVisible()`
-assertion first. The same loop using `locator.waitFor()` or `locator.click()` collects normally on
-the same build and the same machine.
+It is all-or-nothing: either everything is collected, or nothing is.
+
+Which locator call precedes the removal may not be part of the trigger. On microsoft/playwright's
+CI the failure is confined to one test — `expect should not leak`, 61 of 88 runs on
+`macos-15-xlarge`, with the `click` / `fill` / `waitFor` equivalents 0 of 88 — but the one hit
+reproduced in this repo landed on the `wait-for` variant instead.
 
 ## Run it
 
@@ -37,11 +40,24 @@ wholesale retention.
 
 ### Reproduction rate
 
-This is flaky, so a single green run proves nothing. On microsoft/playwright's own
-`macos-15-xlarge` bot (6-core M1) it fails ~70% of runs. On GitHub's *standard* `macos-15` /
-`macos-26` runners (3-core M1, 7 GB) it has not yet been observed — see the workflow runs in this
-repo. If you have access to larger macOS runners, or a physical Apple Silicon machine that shows
-it, that is the configuration worth testing.
+Flaky, and the rate depends enormously on the machine. A single green run proves nothing.
+
+| Where | WebKit | Samples | Full retention |
+| --- | --- | --- | --- |
+| microsoft/playwright CI, `macos-15-xlarge` (6-core M1) | r2359+ | 88 runs | ~70% (61) |
+| this repo, standard `macos-26` (3-core M1, 7 GB) | r2359 | 322 | **1** |
+| this repo, standard `macos-15` | r2359 | 322 | 0 |
+| this repo, `ubuntu-24.04-arm` | r2359 | 322 | 0 |
+| this repo, every runner | r2336 | 966 | 0 |
+
+GitHub's larger macOS runners are an org-level feature, so this repo can only reach the 3-core
+standard ones, where the rate is ~0.3% — enough to confirm the failure exists, not enough to
+bisect against. A 6-core `macos-15-xlarge` bot or a physical Apple Silicon machine is a far better
+place to run this.
+
+The `partial` outcomes the script reports are unrelated: `click` retained exactly one extra element
+6 times across 1932 samples, on both the good and bad builds
+([microsoft/playwright#41462](https://github.com/microsoft/playwright/issues/41462)).
 
 ## The browser is the variable, not Playwright
 
@@ -104,10 +120,10 @@ different:
   (`getComputedStyle` + `getBoundingClientRect`, and/or a bubbling composed `CustomEvent`) in the
   main world, and converts directly into a LayoutTest using `GCController.collect()` with no
   Playwright at all.
-- **only `expect` leaks** — the trigger involves something specific to that path: the assertion
-  runs in an isolated world via an *async* injected function, whereas `wait-for` and `click` run
-  synchronous ones. The `dom-*` variants run in the main world, so an isolated-world-only effect
-  would show up exactly this way.
+- **only the Playwright variants leak** (`expect`, `wait-for`, `click`) — the trigger needs
+  something those share and the `dom-*` variants lack: they run in an isolated world through the
+  injected script, whereas `dom-*` runs in the main world. This is where the evidence currently
+  points, since the one observed hit was on `wait-for`.
 - **`none` leaks** — the assertion is irrelevant and the repro is much smaller than this.
 
 JSC options can be A/B'd on a failing machine without rebuilding WebKit: prefixing an option with
