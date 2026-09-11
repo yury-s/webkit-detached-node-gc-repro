@@ -44,3 +44,33 @@ jobs:
             cat result.txt || echo '(no output)'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # Control: the unreduced test, at the exact commit where microsoft/playwright's own
+  # macos-15-xlarge bot fails it. Tells us whether a green `repro` job above means
+  # "this runner does not trigger it" or "the reduction lost the trigger".
+  upstream-test:
+    name: playwright page-leaks · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-26]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: microsoft/playwright
+          ref: 1cee22292e43dd6abb22b2fb560d12a9db4669c4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps webkit
+
+      # CI=1 is already set by Actions, so this picks up fullyParallel:false and retries:3,
+      # matching how the bot runs it.
+      - run: npx playwright test --config=tests/library/playwright.config.ts tests/page/page-leaks.spec.ts --project=webkit-page --reporter=line
